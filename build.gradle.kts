@@ -56,6 +56,14 @@ dependencies {
     testRuntimeOnly("com.h2database:h2")
 }
 
+sourceSets {
+    main {
+        java {
+            srcDir("build/generated/source/kapt/main")
+        }
+    }
+}
+
 tasks.withType<KotlinCompile> {
     kotlinOptions {
         freeCompilerArgs += "-Xjsr305=strict"
