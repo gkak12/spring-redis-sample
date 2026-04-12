@@ -5,8 +5,8 @@ import com.spring.redis.sample.entity.Store
 import com.spring.redis.sample.repository.StoreRepository
 import com.spring.redis.sample.service.StoreGeoService
 import org.springframework.data.geo.Distance
-import org.springframework.data.geo.Metrics
 import org.springframework.data.geo.Point
+import org.springframework.data.redis.domain.geo.Metrics
 import org.springframework.data.redis.connection.RedisGeoCommands
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.data.redis.domain.geo.GeoReference
@@ -25,7 +25,7 @@ class StoreGeoServiceImpl(
         private const val GEO_KEY = "stores:geo"
 
         // 한 번에 반환할 최대 매장 수
-        private const val MAX_RESULTS = 100
+        private const val MAX_RESULTS = 100L
     }
 
     /**
