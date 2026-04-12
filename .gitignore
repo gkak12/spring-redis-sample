@@ -38,3 +38,9 @@ out/
 
 ### Mac OS ###
 .DS_Store
+
+### json ###
+*.json
+
+### txt ###
+*.txt
