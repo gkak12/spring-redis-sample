@@ -2,6 +2,7 @@ package com.spring.redis.sample.config
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.cache.annotation.EnableCaching
+import org.springframework.cache.interceptor.KeyGenerator
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.data.redis.cache.RedisCacheConfiguration
@@ -16,6 +17,34 @@ import java.time.Duration
 @Configuration
 @EnableCaching // @Cacheable, @CacheEvict 등 Spring Cache 애노테이션 활성화
 class RedisConfig {
+
+    /**
+     * 커스텀 캐시 키 생성기
+     *
+     * 생성 형식: "{클래스명}:{메서드명}:{파라미터1}:{파라미터2}:..."
+     * 예시:
+     *   - StoreServiceImpl.findNearbyStores(37.5, 127.0, 500.0)
+     *     → "StoreService:findNearbyStores:37.5:127.0:500.0"
+     *   - SearchServiceImpl.getTrendingKeywords(10)
+     *     → "SearchService:getTrendingKeywords:10"
+     *
+     * 파라미터가 없으면 "no-args"를 사용해 키 충돌 방지
+     *
+     * spring-cache-sample과의 차이:
+     *   - 첫 번째 파라미터만 키에 포함하던 방식을 개선해 모든 파라미터를 포함
+     *   - 클래스명에서 "Impl" 접미사를 제거해 인터페이스 이름 기준으로 통일
+     */
+    @Bean
+    fun customKeyGenerator(): KeyGenerator = KeyGenerator { target, method, params ->
+        // Spring CGLIB 프록시가 붙이는 "$$EnhancerBySpringCGLIB$$..." 제거
+        val className = target.javaClass.simpleName
+            .split("$$")[0]       // 프록시 접미사 제거
+            .removeSuffix("Impl") // "Impl" 접미사 제거 → 인터페이스 이름 기준으로 통일
+
+        val paramKey = if (params.isEmpty()) "no-args" else params.joinToString(":")
+
+        "$className:${method.name}:$paramKey"
+    }
 
     /**
      * String/객체 모두 처리하는 단일 RedisTemplate
