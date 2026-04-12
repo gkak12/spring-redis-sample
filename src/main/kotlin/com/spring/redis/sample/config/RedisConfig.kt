@@ -14,13 +14,19 @@ import org.springframework.data.redis.serializer.StringRedisSerializer
 import java.time.Duration
 
 @Configuration
-@EnableCaching
+@EnableCaching // @Cacheable, @CacheEvict 등 Spring Cache 애노테이션 활성화
 class RedisConfig {
 
     /**
      * String/객체 모두 처리하는 단일 RedisTemplate
-     * - 키: StringRedisSerializer (사람이 읽기 쉬운 형태)
-     * - 값: Jackson2JsonRedisSerializer (@class 없는 순수 JSON)
+     *
+     * redisTemplate.opsForValue().set("key", someObject) 처럼
+     * 직접 Redis를 조작할 때 사용 (AuthService의 토큰 저장, SearchService의 ZSet 등)
+     *
+     * 키: StringRedisSerializer  → "refresh:token:user1" 형태로 저장 (사람이 읽기 쉬움)
+     * 값: Jackson2JsonRedisSerializer → {"name":"홍길동"} 형태의 순수 JSON 저장
+     *     GenericJackson2JsonRedisSerializer와 달리 @class 타입 정보를 저장하지 않아
+     *     클래스 경로가 바뀌어도 기존 캐시 데이터를 역직렬화할 수 있음
      */
     @Bean
     fun redisTemplate(
@@ -38,29 +44,45 @@ class RedisConfig {
     }
 
     /**
-     * @Cacheable 등 Spring Cache 추상화에서 사용하는 CacheManager
+     * @Cacheable, @CacheEvict 등 Spring Cache 추상화에서 사용하는 CacheManager
+     *
+     * redisTemplate과 별도로 존재하는 이유:
+     * - redisTemplate: 개발자가 Redis 명령을 직접 실행하는 저수준 API
+     * - cacheManager:  @Cacheable 애노테이션이 내부적으로 사용하는 고수준 추상화
      *
      * 캐시별 TTL:
-     * - nearby-stores    : 10분 (매장 정보는 자주 바뀌지 않음)
+     * - nearby-stores    : 10분 (매장 위치 정보는 자주 바뀌지 않음)
      * - trending-keywords:  1분 (검색어 트렌드는 빠르게 갱신)
+     * - 그 외 캐시       :  TTL 없음 (defaultConfig 적용)
      */
     @Bean
     fun cacheManager(
         connectionFactory: RedisConnectionFactory,
         objectMapper: ObjectMapper
     ): RedisCacheManager {
+        // redisTemplate과 동일한 직렬화 방식 사용 (Redis에 저장되는 JSON 형태 통일)
         val serializer = Jackson2JsonRedisSerializer(objectMapper, Any::class.java)
+
+        // 모든 캐시에 공통 적용할 기본 설정
+        // RedisCacheConfiguration은 불변 객체 → 메서드 호출마다 새 객체를 반환하므로 체이닝으로 설정을 쌓아감
         val defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
+            // 캐시 키를 문자열로 직렬화 → Redis에서 "nearby-stores::37.5:127.0:500.0" 형태로 보임
             .serializeKeysWith(
                 RedisSerializationContext.SerializationPair.fromSerializer(StringRedisSerializer())
             )
+            // 캐시 값을 JSON으로 직렬화
             .serializeValuesWith(
                 RedisSerializationContext.SerializationPair.fromSerializer(serializer)
             )
+            // null 캐싱 금지
+            // null을 캐싱하면 이후 실제 데이터가 생겨도 캐시가 null을 반환하는 문제 발생
             .disableCachingNullValues()
 
         return RedisCacheManager.builder(connectionFactory)
+            // withCacheConfiguration에 명시되지 않은 캐시의 fallback 설정
             .cacheDefaults(defaultConfig)
+            // defaultConfig는 불변이므로 entryTtl()은 TTL만 다른 새 객체를 반환
+            // 즉, defaultConfig의 직렬화 설정은 그대로 유지하고 TTL만 덮어씀
             .withCacheConfiguration(
                 "nearby-stores",
                 defaultConfig.entryTtl(Duration.ofMinutes(10))
