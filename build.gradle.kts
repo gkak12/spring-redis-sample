@@ -50,6 +50,9 @@ dependencies {
     implementation("org.flywaydb:flyway-core")
     implementation("org.flywaydb:flyway-mysql")
 
+    // OAuth2 Client
+    implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
+
     // Actuator + Prometheus
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     runtimeOnly("io.micrometer:micrometer-registry-prometheus")
