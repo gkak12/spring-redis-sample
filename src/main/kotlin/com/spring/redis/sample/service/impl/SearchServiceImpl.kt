@@ -1,5 +1,6 @@
 package com.spring.redis.sample.service.impl
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.f4b6a3.ulid.UlidCreator
 import com.spring.redis.sample.dto.search.TrendingKeyword
 import com.spring.redis.sample.service.SearchService
@@ -7,6 +8,8 @@ import com.spring.redis.sample.service.SearchService.Companion.TOP_N
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.data.redis.core.RedisTemplate
+import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer
+import org.springframework.data.redis.serializer.StringRedisSerializer
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -14,26 +17,44 @@ import java.util.concurrent.TimeUnit
 
 @Service
 class SearchServiceImpl(
-    private val redisTemplate: RedisTemplate<String, Any>
+    private val redisTemplate: RedisTemplate<String, Any>,
+    objectMapper: ObjectMapper
 ) : SearchService {
 
+    // Pipeline에서 직접 바이트 직렬화 시 redisTemplate과 동일한 직렬화 방식 유지
+    private val keySerializer = StringRedisSerializer()
+    private val valueSerializer = Jackson2JsonRedisSerializer(objectMapper, Any::class.java)
+
     /**
-     * 검색어 기록 - 새 검색어가 들어올 때마다 트렌딩 캐시 무효화
+     * 검색어 기록 - Pipeline으로 incrementScore + expire 2개 명령을 1번 왕복으로 처리
+     *
+     * Pipeline 미사용 시: Redis 왕복 2회 (incrementScore → expire)
+     * Pipeline 사용 시:  Redis 왕복 1회 (두 명령을 묶어서 전송)
+     *
+     * @CacheEvict: 새 검색어 유입 시 트렌딩 캐시 무효화
      */
     @CacheEvict(value = ["trending-keywords"], allEntries = true)
     override fun recordSearch(keyword: String) {
         val bucketKey = getCurrentBucketKey()
-        redisTemplate.opsForZSet().incrementScore(bucketKey, keyword, 1.0)
-        redisTemplate.expire(bucketKey, BUCKET_TTL_HOURS, TimeUnit.HOURS)
+        val rawKey = keySerializer.serialize(bucketKey)!!
+        val rawMember = valueSerializer.serialize(keyword)!!
+
+        redisTemplate.executePipelined { connection ->
+            // incrementScore: ZSet에서 keyword 점수 1 증가 (없으면 1로 생성)
+            connection.zSetCommands().zIncrBy(rawKey, 1.0, rawMember)
+            // expire: 버킷 TTL 갱신 (매 검색마다 만료 시간 연장)
+            connection.keyCommands().expire(rawKey, BUCKET_TTL_HOURS * 3600L)
+            null // executePipelined의 RedisCallback은 반드시 null 반환
+        }
     }
 
     /**
      * 실시간 인기 검색어 조회 - ZSet unionAndStore 결과를 1분간 캐싱
      *
-     * 캐시 키: topN 값 (기본 10)
+     * 캐시 키 예시: "SearchService:getTrendingKeywords:10"
      * recordSearch 호출 시 @CacheEvict로 자동 무효화
      */
-    @Cacheable(value = ["trending-keywords"], key = "#topN")
+    @Cacheable(value = ["trending-keywords"], keyGenerator = "customKeyGenerator")
     override fun getTrendingKeywords(topN: Long): List<TrendingKeyword> {
         val bucketKeys = getRecentBucketKeys()
         val resultKey = "trending:result:${UlidCreator.getUlid()}"
