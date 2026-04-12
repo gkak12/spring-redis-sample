@@ -26,7 +26,15 @@ spring:
     redis:
       host: localhost
       port: 6379
-      password: your_redis_password
+      password: 1234
+      timeout: 2000ms
+      connect-timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+          max-wait: 2000ms
 
 jwt:
   secret: your-secret-key-should-be-at-least-256-bits-long-for-hs256-algorithm
@@ -35,6 +43,16 @@ jwt:
 
 server:
   port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus, health
+  metrics:
+    export:
+      prometheus:
+        enabled: true
 
 logging:
   level:
