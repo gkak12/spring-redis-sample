@@ -7,11 +7,12 @@ import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import com.github.f4b6a3.ulid.UlidCreator
 import java.util.concurrent.TimeUnit
 
 @Service
 class SearchServiceImpl(
-    private val redisTemplate: RedisTemplate<String, String>
+    private val redisTemplate: RedisTemplate<String, Any>
 ) : SearchService {
 
     override fun recordSearch(keyword: String) {
@@ -22,7 +23,7 @@ class SearchServiceImpl(
 
     override fun getTrendingKeywords(topN: Long): List<TrendingKeyword> {
         val bucketKeys = getRecentBucketKeys()
-        val resultKey = "trending:result:${System.currentTimeMillis()}"
+        val resultKey = "trending:result:${UlidCreator.getUlid()}"
 
         return try {
             redisTemplate.opsForZSet()
@@ -34,7 +35,7 @@ class SearchServiceImpl(
             result?.mapIndexed { index, tuple ->
                 TrendingKeyword(
                     rank = index + 1,
-                    keyword = tuple.value ?: "",
+                    keyword = tuple.value?.toString() ?: "",
                     score = tuple.score?.toLong() ?: 0L
                 )
             } ?: emptyList()

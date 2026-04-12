@@ -57,6 +57,9 @@ dependencies {
     // Lettuce connection pool
     implementation("org.apache.commons:commons-pool2")
 
+    // ULID
+    implementation("com.github.f4b6a3:ulid-creator:5.2.3")
+
     // Test
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.security:spring-security-test")

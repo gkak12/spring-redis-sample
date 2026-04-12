@@ -19,7 +19,7 @@ class AuthServiceImpl(
     private val userRepository: UserRepository,
     private val passwordEncoder: PasswordEncoder,
     private val jwtTokenProvider: JwtTokenProvider,
-    private val redisTemplate: RedisTemplate<String, String>
+    private val redisTemplate: RedisTemplate<String, Any>
 ) : AuthService {
 
     @Transactional
@@ -59,7 +59,7 @@ class AuthServiceImpl(
         }
 
         val username = jwtTokenProvider.getUsernameFromToken(refreshToken)
-        val storedToken = redisTemplate.opsForValue().get(refreshTokenKey(username))
+        val storedToken = redisTemplate.opsForValue().get(refreshTokenKey(username)) as? String
 
         if (storedToken == null || storedToken != refreshToken) {
             throw IllegalArgumentException("만료되었거나 이미 사용된 리프레시 토큰입니다.")

@@ -4,13 +4,13 @@ import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.data.redis.core.script.DefaultRedisScript
 import org.springframework.stereotype.Component
+import com.github.f4b6a3.ulid.UlidCreator
 import java.time.Duration
-import java.util.UUID
 
 /**
  * Redis 기반 분산 락 매니저
  *
- * - 락 획득: SETNX로 UUID 값 저장 (TTL 포함)
+ * - 락 획득: SETNX로 ULID 값 저장 (TTL 포함)
  * - 락 해제: Lua 스크립트로 소유 여부 확인 후 원자적 삭제
  *   → 내가 획득한 락만 해제 가능, 타 스레드 락을 실수로 삭제하는 문제 방지
  */
@@ -42,10 +42,10 @@ class RedisLockManager(
 
     /**
      * 락 획득 시도
-     * @return 락 획득 성공 시 lockValue(UUID), 실패 시 null
+     * @return 락 획득 성공 시 lockValue(ULID), 실패 시 null
      */
     fun acquire(lockKey: String): String? {
-        val lockValue = UUID.randomUUID().toString()
+        val lockValue = UlidCreator.getUlid().toString()
         val acquired = redisTemplate.opsForValue()
             .setIfAbsent(lockKey, lockValue, LOCK_TTL) ?: false
         return if (acquired) lockValue else null
