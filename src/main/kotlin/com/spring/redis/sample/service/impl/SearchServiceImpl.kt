@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.f4b6a3.ulid.UlidCreator
 import com.spring.redis.sample.dto.search.TrendingKeyword
 import com.spring.redis.sample.service.SearchService
+import com.spring.redis.sample.service.SearchService.Companion.MAX_RECENT
 import com.spring.redis.sample.service.SearchService.Companion.TOP_N
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.Cacheable
@@ -78,6 +79,42 @@ class SearchServiceImpl(
         }
     }
 
+    /**
+     * 유저별 최근 검색어 저장
+     *
+     * LPUSH: 리스트 앞에 추가 (최신순 유지)
+     * LTRIM: 최대 MAX_RECENT개만 유지 (오래된 항목 자동 제거)
+     *
+     * Redis 저장 형태:
+     *   Key:   recent:search:user1
+     *   Value: ["치킨", "피자", "카페", ...]  ← 왼쪽이 최신
+     */
+    override fun saveRecentKeyword(username: String, keyword: String) {
+        val key = recentKey(username)
+        redisTemplate.opsForList().leftPush(key, keyword)
+        // 0 ~ MAX_RECENT-1 인덱스만 유지 → 초과분 자동 삭제
+        redisTemplate.opsForList().trim(key, 0, MAX_RECENT - 1)
+    }
+
+    /**
+     * 유저별 최근 검색어 조회
+     * LRANGE 0 -1: 리스트 전체 반환 (최신순)
+     */
+    override fun getRecentKeywords(username: String): List<String> {
+        return redisTemplate.opsForList()
+            .range(recentKey(username), 0, -1)
+            ?.filterNotNull()
+            ?.map { it.toString() }
+            ?: emptyList()
+    }
+
+    /**
+     * 유저별 최근 검색어 전체 삭제
+     */
+    override fun clearRecentKeywords(username: String) {
+        redisTemplate.delete(recentKey(username))
+    }
+
     private fun getCurrentBucketKey(): String {
         return "$BUCKET_PREFIX${LocalDateTime.now().format(BUCKET_FORMATTER)}"
     }
@@ -88,6 +125,8 @@ class SearchServiceImpl(
             "$BUCKET_PREFIX${now.minusHours(hoursAgo.toLong()).format(BUCKET_FORMATTER)}"
         }
     }
+
+    private fun recentKey(username: String) = "recent:search:$username"
 
     companion object {
         private const val BUCKET_PREFIX = "search:bucket:"
