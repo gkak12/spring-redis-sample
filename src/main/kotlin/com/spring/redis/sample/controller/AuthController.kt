@@ -4,6 +4,7 @@ import com.spring.redis.sample.dto.auth.LoginRequest
 import com.spring.redis.sample.dto.auth.RefreshTokenRequest
 import com.spring.redis.sample.dto.auth.SignUpRequest
 import com.spring.redis.sample.dto.auth.TokenResponse
+import com.spring.redis.sample.ratelimit.RateLimit
 import com.spring.redis.sample.service.AuthService
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
@@ -23,7 +24,9 @@ class AuthController(
     /**
      * 회원가입
      * POST /api/auth/signup
+     * Rate Limit: 1분에 3회 (스팸 가입 방지)
      */
+    @RateLimit(limit = 3, windowSeconds = 60)
     @PostMapping("/signup")
     fun signUp(@Valid @RequestBody request: SignUpRequest): ResponseEntity<Map<String, String>> {
         authService.signUp(request)
@@ -34,7 +37,9 @@ class AuthController(
     /**
      * 로그인 - Access Token + Refresh Token 발급
      * POST /api/auth/login
+     * Rate Limit: 1분에 5회 (Brute Force 공격 방지)
      */
+    @RateLimit(limit = 5, windowSeconds = 60)
     @PostMapping("/login")
     fun login(@Valid @RequestBody request: LoginRequest): ResponseEntity<TokenResponse> =
         ResponseEntity.ok(authService.login(request))

@@ -1,5 +1,6 @@
 package com.spring.redis.sample.controller
 
+import com.spring.redis.sample.ratelimit.RateLimit
 import com.spring.redis.sample.service.StoreLikeService
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
@@ -13,7 +14,9 @@ class StoreLikeController(
     /**
      * 매장 좋아요
      * POST /api/stores/{storeId}/likes?username=user1
+     * Rate Limit: 1분에 20회 (도배 방지)
      */
+    @RateLimit(limit = 20, windowSeconds = 60)
     @PostMapping
     fun like(
         @PathVariable storeId: Long,

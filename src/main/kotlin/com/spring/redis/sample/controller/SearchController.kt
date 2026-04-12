@@ -2,11 +2,14 @@ package com.spring.redis.sample.controller
 
 import com.spring.redis.sample.dto.search.SearchRequest
 import com.spring.redis.sample.dto.search.TrendingKeyword
+import com.spring.redis.sample.ratelimit.RateLimit
 import com.spring.redis.sample.service.SearchService
 import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
+// 검색 API 기본 Rate Limit: 1분에 30회
+@RateLimit(limit = 30, windowSeconds = 60)
 @RestController
 @RequestMapping("/api/search")
 class SearchController(
