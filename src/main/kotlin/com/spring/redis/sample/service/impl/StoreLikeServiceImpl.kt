@@ -1,60 +1,96 @@
 package com.spring.redis.sample.service.impl
 
+import com.spring.redis.sample.repository.StoreLikeRepository
 import com.spring.redis.sample.service.StoreLikeService
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.stereotype.Service
 
+/**
+ * Write-Behind 패턴으로 좋아요 관리
+ *
+ * 흐름:
+ *   like/unlike → Redis Set 즉시 반영 + dirty Set에 storeId 추가
+ *   StoreLikeSyncScheduler → 1분마다 dirty 매장을 Redis → DB 동기화
+ *
+ * Redis 장애 시:
+ *   getLikeCount / isLiked → Redis 키 없으면 DB 폴백
+ *   서버 재시작 시 → StoreLikeRestoreRunner가 DB → Redis 복원
+ *
+ * Key 구조:
+ *   store:likes:{storeId}  → Set (좋아요한 username 집합)
+ *   store:likes:dirty      → Set (DB 동기화가 필요한 storeId 집합)
+ */
 @Service
 class StoreLikeServiceImpl(
-    private val redisTemplate: RedisTemplate<String, Any>
+    private val redisTemplate: RedisTemplate<String, Any>,
+    private val storeLikeRepository: StoreLikeRepository
 ) : StoreLikeService {
 
+    companion object {
+        const val DIRTY_KEY = "store:likes:dirty"
+    }
+
     /**
-     * 매장 좋아요 - Set SADD
+     * 좋아요 - Set SADD
      *
      * Redis 저장 형태:
      *   Key:   store:likes:1
-     *   Value: { "user1", "user2", "user3" }  ← 중복 없는 집합
+     *   Value: { "user1", "user2", "user3" }
      *
      * SADD 반환값:
-     *   1: 새로 추가됨 (좋아요 성공)
-     *   0: 이미 존재함 (중복 좋아요 시도)
-     *
-     * DB 방식과의 차이:
-     *   DB: SELECT → 중복 확인 → INSERT (2번 쿼리 또는 unique 제약 에러 처리)
-     *   Set: SADD 1번으로 중복 방지 + 추가 동시 처리
+     *   1: 새로 추가됨 (좋아요 성공) → dirty 마킹
+     *   0: 이미 존재함 (중복 좋아요) → dirty 마킹 불필요
      */
     override fun like(storeId: Long, username: String): Boolean {
         val added = redisTemplate.opsForSet().add(likeKey(storeId), username)
+        if (added == 1L) {
+            // DB 동기화가 필요한 storeId를 dirty Set에 추가
+            redisTemplate.opsForSet().add(DIRTY_KEY, storeId.toString())
+        }
         return added == 1L
     }
 
     /**
-     * 매장 좋아요 취소 - Set SREM
-     * 존재하지 않는 값을 제거해도 에러 없이 무시됨
+     * 좋아요 취소 - Set SREM
+     * 실제로 제거된 경우(1L)에만 dirty 마킹
      */
     override fun unlike(storeId: Long, username: String) {
-        redisTemplate.opsForSet().remove(likeKey(storeId), username)
+        val removed = redisTemplate.opsForSet().remove(likeKey(storeId), username)
+        if (removed == 1L) {
+            redisTemplate.opsForSet().add(DIRTY_KEY, storeId.toString())
+        }
     }
 
     /**
      * 좋아요 수 조회 - Set SCARD
-     * O(1) 시간복잡도로 전체 카운트 반환
+     *
+     * Redis 우선 조회:
+     *   - Redis 키 존재 → SCARD (O(1), 인메모리)
+     *   - Redis 키 없음 → DB COUNT 폴백 (서버 재시작 후 복원 전까지)
      */
     override fun getLikeCount(storeId: Long): Long {
-        return redisTemplate.opsForSet().size(likeKey(storeId)) ?: 0L
+        val key = likeKey(storeId)
+        if (redisTemplate.hasKey(key)) {
+            return redisTemplate.opsForSet().size(key) ?: 0L
+        }
+        // Redis 키 없음 → DB 폴백
+        return storeLikeRepository.countByStoreId(storeId)
     }
 
     /**
      * 좋아요 여부 확인 - Set SISMEMBER
-     * O(1) 시간복잡도
      *
-     * DB 방식과의 차이:
-     *   DB: SELECT count(*) WHERE store_id = ? AND user_id = ?
-     *   Set: SISMEMBER → 인메모리 O(1) 조회
+     * Redis 우선 조회:
+     *   - Redis 키 존재 → SISMEMBER (O(1))
+     *   - Redis 키 없음 → DB EXISTS 폴백
      */
     override fun isLiked(storeId: Long, username: String): Boolean {
-        return redisTemplate.opsForSet().isMember(likeKey(storeId), username) ?: false
+        val key = likeKey(storeId)
+        if (redisTemplate.hasKey(key)) {
+            return redisTemplate.opsForSet().isMember(key, username) ?: false
+        }
+        // Redis 키 없음 → DB 폴백
+        return storeLikeRepository.existsByStoreIdAndUsername(storeId, username)
     }
 
     private fun likeKey(storeId: Long) = "store:likes:$storeId"
