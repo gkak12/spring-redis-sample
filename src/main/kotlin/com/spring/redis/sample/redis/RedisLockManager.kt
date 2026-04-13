@@ -1,7 +1,7 @@
 package com.spring.redis.sample.redis
 
 import org.slf4j.LoggerFactory
-import org.springframework.data.redis.core.RedisTemplate
+import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.script.DefaultRedisScript
 import org.springframework.stereotype.Component
 import com.github.f4b6a3.ulid.UlidCreator
@@ -16,7 +16,7 @@ import java.time.Duration
  */
 @Component
 class RedisLockManager(
-    private val redisTemplate: RedisTemplate<String, Any>
+    private val redisTemplate: StringRedisTemplate
 ) {
 
     private val log = LoggerFactory.getLogger(javaClass)
