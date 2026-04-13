@@ -88,6 +88,10 @@ management:
       prometheus:
         enabled: true
 
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
 logging:
   level:
     com.example.springredissample: DEBUG
