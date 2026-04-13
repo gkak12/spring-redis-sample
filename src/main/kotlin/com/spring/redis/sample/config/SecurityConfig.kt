@@ -46,8 +46,11 @@ class SecurityConfig(
                         "/api/search/trending",
                         "/api/stores/nearby",
                         "/api/stores/nearby/geo",
-                        "/login/oauth2/**",       // OAuth2 콜백 URL
-                        "/oauth2/authorization/**" // OAuth2 인가 요청 URL
+                        "/login/oauth2/**",        // OAuth2 콜백 URL
+                        "/oauth2/authorization/**", // OAuth2 인가 요청 URL
+                        "/swagger-ui/**",           // Swagger UI
+                        "/swagger-ui.html",
+                        "/v3/api-docs/**"           // OpenAPI JSON
                     ).permitAll()
                     .anyRequest().authenticated()
             }

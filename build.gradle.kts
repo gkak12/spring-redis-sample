@@ -63,6 +63,9 @@ dependencies {
     // ULID
     implementation("com.github.f4b6a3:ulid-creator:5.2.3")
 
+    // Swagger (SpringDoc OpenAPI)
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0")
+
     // Test
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.security:spring-security-test")
